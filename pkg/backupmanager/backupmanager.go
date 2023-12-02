@@ -2,14 +2,15 @@ package backupmanager
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 
-	"github.com/sevigo/shugosha/pkg/backup"
 	"github.com/sevigo/shugosha/pkg/db"
 	"github.com/sevigo/shugosha/pkg/fsmonitor"
+	"github.com/sevigo/shugosha/pkg/model"
 )
 
 type BackupResult struct {
@@ -20,16 +21,16 @@ type BackupResult struct {
 
 type BackupManager struct {
 	db         db.DB
-	providers  map[string]backup.Provider
+	providers  map[string]model.Provider // this is an interface
 	resultChan chan BackupResult
 	mu         sync.Mutex // Mutex for thread-safe operations
 }
 
 // NewBackupManager initializes a new BackupManager with the given providers and database path.
-func NewBackupManager(db db.DB, providers map[string]backup.Provider) (*BackupManager, error) {
+func NewBackupManager(storage db.DB, providers map[string]model.Provider) (*BackupManager, error) {
 	slog.Debug("BackupManager initialized")
 	return &BackupManager{
-		db:         db,
+		db:         storage,
 		providers:  providers,
 		resultChan: make(chan BackupResult, 10),
 	}, nil
@@ -44,12 +45,15 @@ func (m *BackupManager) HandleEvent(event fsmonitor.Event) {
 	slog.Debug("[BackupManager] HandleEvent", "type", event.Type, "path", event.Path)
 
 	for _, provider := range m.providers {
-		go func(provider backup.Provider) {
+		// handle event by registered provider
+		go func(provider model.Provider) {
+
+			// check if the file is stored
 			if m.isBackupNeeded(event.Path, event.Checksum, provider.Name()) {
 				slog.Debug("[BackupManager] Backup needed", "path", event.Path, "provider", provider.Name())
 
+				// create backup and communicate the result back
 				result := BackupResult{Path: event.Path, Status: "Success"}
-
 				if err := provider.Backup(event.Path); err != nil {
 					result.Status = "Failed"
 					result.Error = err.Error()
@@ -74,7 +78,7 @@ func (m *BackupManager) isBackupNeeded(path, checksum, providerName string) bool
 	value, err := m.db.Get(path)
 	if err != nil {
 		// Handle not found as a need for backup
-		if err == badger.ErrKeyNotFound {
+		if errors.Is(err, badger.ErrKeyNotFound) {
 			return true
 		}
 		slog.Error("[BackupManager] Error accessing DB", "error", err)
@@ -100,7 +104,7 @@ func (m *BackupManager) updateRecord(path, checksum, providerName string) {
 	value, err := m.db.Get(path)
 	if err != nil {
 		// If an error other than not found, log and exit
-		if err != badger.ErrKeyNotFound {
+		if errors.Is(err, badger.ErrKeyNotFound) {
 			slog.Error("Failed to retrieve record from DB", "error", err, "path", path)
 			return
 		}

@@ -13,15 +13,14 @@ import (
 
 // Monitor provides file system monitoring.
 type Monitor struct {
-	watcher      *fsnotify.Watcher
-	eventHandler EventHandler
-	mu           sync.Mutex
-	eventBuffer  map[string][]fsnotify.Event
-	bufferLock   sync.Mutex
-	flushTimer   *time.Timer
-	flushDelay   time.Duration
-	subscribers  []Subscriber
-	subLock      sync.Mutex // Protects the subscribers slice
+	dirs        map[string]int
+	watcher     *fsnotify.Watcher
+	eventBuffer map[string][]fsnotify.Event
+	bufferLock  sync.Mutex
+	flushTimer  *time.Timer
+	flushDelay  time.Duration
+	subscribers []Subscriber
+	subLock     sync.Mutex // Protects the subscribers slice
 }
 
 // New creates a new Monitor instance.
@@ -36,6 +35,7 @@ func New(cfg *Config) (*Monitor, error) {
 		eventBuffer: make(map[string][]fsnotify.Event), // Initialize the eventBuffer
 		flushDelay:  cfg.FlushDelay,
 		subscribers: make([]Subscriber, 0),
+		dirs:        make(map[string]int),
 	}, nil
 }
 
@@ -62,6 +62,14 @@ func (m *Monitor) Unsubscribe(sub Subscriber) {
 
 // Add adds a new directory to the watch list.
 func (m *Monitor) Add(path string) error {
+	_, isMonitored := m.dirs[path]
+	if isMonitored {
+		m.dirs[path]++
+		return nil
+	}
+
+	m.dirs[path] = 1
+
 	return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -84,6 +92,7 @@ func (m *Monitor) Add(path string) error {
 
 // Remove removes a directory from the watch list.
 func (m *Monitor) Remove(path string) error {
+	m.dirs[path]--
 	return m.watcher.Remove(path)
 }
 

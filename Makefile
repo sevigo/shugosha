@@ -14,6 +14,11 @@ GO_CLEAN=go clean
 GO_TEST=go test
 GO_FMT=go fmt
 GO_VET=go vet
+GO_RUN=go run
+
+# Run
+run:
+	$(GO_RUN) cmd/shugosha/main.go
 
 # Build the project
 build: 

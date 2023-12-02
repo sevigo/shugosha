@@ -29,10 +29,13 @@ func determineFinalEvent(events []fsnotify.Event) *Event {
 		switch {
 		case event.Op&fsnotify.Create == fsnotify.Create:
 			created = true
+
 		case event.Op&fsnotify.Write == fsnotify.Write:
 			changed = true
+
 		case event.Op&fsnotify.Remove == fsnotify.Remove:
 			removed = true
+
 		case event.Op&fsnotify.Rename == fsnotify.Rename:
 			renamed = true
 		}

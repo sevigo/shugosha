@@ -6,114 +6,118 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/sevigo/shugosha/pkg/backup"
 	"github.com/sevigo/shugosha/pkg/backupmanager"
 	"github.com/sevigo/shugosha/pkg/config"
 	"github.com/sevigo/shugosha/pkg/db"
 	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/logger"
+	"github.com/sevigo/shugosha/pkg/model"
+	"github.com/sevigo/shugosha/pkg/provider"
 )
 
 const version = 0.2
 
-// Example configuration
-var backupConfig = config.BackupConfig{
-	Providers: []config.ProviderConfig{
-		{
-			Name:     "LocalBackup",
-			Type:     "Local",
-			Settings: map[string]string{"path": "/local/backup"},
-		},
-		{
-			Name:     "CloudBackup",
-			Type:     "AWS",
-			Settings: map[string]string{
-				"accessKey": "key", 
-				"secretKey": "secret",
-			},
-		},
-	},
-	DirectoryList: []string{
-		"/path/to/dir1", 
-		"/path/to/dir2",
-	},
-	DirectoryMap: map[string]string{
-		"/path/to/dir1": "LocalBackup",
-		"/path/to/dir2": "CloudBackup",
-	},
-}
-
-func init() {
-	logger.Setup()
-}
-
 func main() {
+	logger.Setup()
 	slog.Info("Starting 「Shugosha」 service", "version", version)
 
-	// Initialize backup providers
-	dummyProvider := backup.NewDummyProvider() // Example provider
-	providers := map[string]backup.Provider{
-		"Dummy": dummyProvider,
-	}
+	// Initialize providers
+	backupConfig := config.LoadDefaultConfig()
+	providers := provider.InitializeProviders(backupConfig)
 
-	// Initialize the database
-	db, err := db.NewBadgerDB(".db/")
+	// Initialize database
+	storage, err := initializeDatabase()
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		slog.Error("Database initialization failed", "error", err)
+		return
 	}
-	defer db.Close()
+	defer storage.Close()
 
-	// Initialize the backup manager with Badger DB path and providers
-	backupManager, err := backupmanager.NewBackupManager(db, providers)
+	// Initialize backup manager
+	backupManager, err := initializeBackupManager(storage, providers)
 	if err != nil {
-		log.Fatalf("Failed to create backup manager: %v", err)
+		slog.Error("Backup manager initialization failed", "error", err)
+		return
 	}
 	defer backupManager.Close()
 
-	monitor, err := fsmonitor.New(fsmonitor.DefaultConfig())
+	// Setup and start file system monitor
+	monitor, err := setupAndStartMonitor(providers, backupManager)
 	if err != nil {
-		panic(err)
-	}
-	defer monitor.Stop()
-
-	// Subscribe the backup manager to fsmonitor events
-	monitor.Subscribe(backupManager)
-
-	monitor.Start()
-
-	// Add directories to the watch list
-	pathsToWatch := []string{`C:\Users\igork\Test`}
-	for _, path := range pathsToWatch {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			slog.Error("Failed to get absolute path", "path", path, "error", err)
-			continue
-		}
-
-		err = monitor.Add(absPath)
-		if err != nil {
-			slog.Error("Failed to add path to monitor", "path", absPath, "error", err)
-		} else {
-			slog.Info("Start monitoring", "path", absPath)
-		}
+		slog.Error("File system monitoring initialization failed", "error", err)
+		return
 	}
 
 	// Process backup results (optional)
-	go func() {
-		for result := range backupManager.Results() {
-			// Handle backup results, e.g., log them
-			log.Printf("Backup result for %s: %s\n", result.Path, result.Status)
-			if result.Status == "Failed" {
-				log.Printf("Backup error: %s\n", result.Error)
-			}
-		}
-	}()
+	go processBackupResults(backupManager)
 
-	// Wait for user input to stop the monitor (for demonstration purposes)
-	fmt.Println("Press ENTER to stop monitoring...")
-	fmt.Scanln()
+	// Wait for user input to stop the monitor
+	waitForUserInput()
 
 	// Stop the monitor
+	stopMonitor(monitor)
+}
+
+func initializeDatabase() (*db.BadgerDB, error) {
+	storage, err := db.NewBadgerDB(".db/")
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+	return storage, nil
+}
+
+func initializeBackupManager(storage *db.BadgerDB, providers map[string]model.Provider) (*backupmanager.BackupManager, error) {
+	backupManager, err := backupmanager.NewBackupManager(storage, providers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create backup manager: %w", err)
+	}
+	return backupManager, nil
+}
+
+func setupAndStartMonitor(providers map[string]model.Provider, backupManager *backupmanager.BackupManager) (*fsmonitor.Monitor, error) {
+	monitor, err := fsmonitor.New(fsmonitor.DefaultConfig())
+	if err != nil {
+		slog.Error("Failed to setup file system monitor", "error", err)
+		return nil, err
+	}
+
+	monitor.Subscribe(backupManager)
+
+	for _, provider := range providers {
+		for _, path := range provider.DirectoryList() {
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				slog.Error("Failed to get absolute path", "path", path, "error", err)
+				continue
+			}
+
+			if err := monitor.Add(absPath); err != nil {
+				slog.Error("Failed to add path to monitor", "path", absPath, "error", err)
+			} else {
+				slog.Info("Start monitoring", "path", absPath)
+			}
+		}
+	}
+
+	monitor.Start()
+	return monitor, nil
+}
+
+func processBackupResults(backupManager *backupmanager.BackupManager) {
+	for result := range backupManager.Results() {
+		log.Printf("Backup result for %s: %s\n", result.Path, result.Status)
+		if result.Status == "Failed" {
+			log.Printf("Backup error: %s\n", result.Error)
+		}
+	}
+}
+
+func waitForUserInput() {
+	fmt.Println("Press ENTER to stop monitoring...")
+	fmt.Scanln()
+}
+
+func stopMonitor(monitor *fsmonitor.Monitor) {
 	if err := monitor.Stop(); err != nil {
 		slog.Error("Failed to stop monitor", "error", err)
 	}
