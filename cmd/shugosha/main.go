@@ -21,10 +21,6 @@ func main() {
 	logger.Setup()
 	slog.Info("Starting 「Shugosha」 service", "version", version)
 
-	// Initialize providers
-	backupConfig := config.LoadDefaultConfig()
-	providers := provider.InitializeProviders(backupConfig)
-
 	// Initialize database
 	storage, err := initializeDatabase()
 	if err != nil {
@@ -32,6 +28,21 @@ func main() {
 		return
 	}
 	defer storage.Close()
+
+	// Initialize providers
+	configManager, err := config.NewConfigManager(storage)
+	if err != nil {
+		slog.Error("Config manager initialization failed", "error", err)
+		return
+	}
+
+	backupConfig, err := configManager.LoadConfig()
+	if err != nil {
+		slog.Error("Can't load configuration", "error", err)
+		return
+	}
+
+	providers := provider.InitializeProviders(backupConfig)
 
 	// Initialize backup manager
 	backupManager, err := initializeBackupManager(storage, providers)
