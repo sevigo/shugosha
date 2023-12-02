@@ -8,12 +8,40 @@ import (
 
 	"github.com/sevigo/shugosha/pkg/backup"
 	"github.com/sevigo/shugosha/pkg/backupmanager"
+	"github.com/sevigo/shugosha/pkg/config"
 	"github.com/sevigo/shugosha/pkg/db"
 	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/logger"
 )
 
-const version = 0.1
+const version = 0.2
+
+// Example configuration
+var backupConfig = config.BackupConfig{
+	Providers: []config.ProviderConfig{
+		{
+			Name:     "LocalBackup",
+			Type:     "Local",
+			Settings: map[string]string{"path": "/local/backup"},
+		},
+		{
+			Name:     "CloudBackup",
+			Type:     "AWS",
+			Settings: map[string]string{
+				"accessKey": "key", 
+				"secretKey": "secret",
+			},
+		},
+	},
+	DirectoryList: []string{
+		"/path/to/dir1", 
+		"/path/to/dir2",
+	},
+	DirectoryMap: map[string]string{
+		"/path/to/dir1": "LocalBackup",
+		"/path/to/dir2": "CloudBackup",
+	},
+}
 
 func init() {
 	logger.Setup()
