@@ -3,7 +3,6 @@ package echo
 import (
 	"fmt"
 
-	"github.com/sevigo/shugosha/pkg/config"
 	"github.com/sevigo/shugosha/pkg/model"
 )
 
@@ -13,7 +12,7 @@ type provider struct {
 }
 
 // NewEchoProvider creates a new EchoProvider.
-func NewEchoProvider(providerConfig *config.ProviderConfig) (model.Provider, error) {
+func NewEchoProvider(providerConfig *model.ProviderConfig) (model.Provider, error) {
 	return &provider{
 		directoryList: providerConfig.DirectoryList,
 	}, nil

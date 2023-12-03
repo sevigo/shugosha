@@ -6,20 +6,11 @@ import (
 	"log"
 	"os"
 	"runtime"
+
+	"github.com/sevigo/shugosha/pkg/model"
 )
 
-type BackupConfig struct {
-	Providers []ProviderConfig `json:"providers"`
-}
-
-type ProviderConfig struct {
-	Name          string            `json:"name"`
-	Type          string            `json:"type"`     // e.g., "Echo", "AWS"
-	Settings      map[string]string `json:"settings"` // Provider-specific settings like access keys
-	DirectoryList []string          `json:"directoryList"`
-}
-
-func LoadDefaultConfig() *BackupConfig {
+func LoadDefaultConfig() *model.BackupConfig {
 	var configPath string
 	switch runtime.GOOS {
 	case "windows":
@@ -40,8 +31,8 @@ func LoadDefaultConfig() *BackupConfig {
 	return backupConfig
 }
 
-func LoadConfig(configPath string) (*BackupConfig, error) {
-	var config BackupConfig
+func LoadConfig(configPath string) (*model.BackupConfig, error) {
+	var config model.BackupConfig
 
 	configFile, err := os.ReadFile(configPath)
 	if err != nil {

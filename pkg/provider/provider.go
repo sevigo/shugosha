@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/sevigo/shugosha/pkg/config"
 	"github.com/sevigo/shugosha/pkg/model"
 	"github.com/sevigo/shugosha/pkg/provider/echo"
 )
 
 // NewProvider creates a new provider based on the given config.
-func NewProvider(providerConf *config.ProviderConfig) (model.Provider, error) {
+func NewProvider(providerConf *model.ProviderConfig) (model.Provider, error) {
 	switch providerConf.Type {
 	case "Echo":
 		return echo.NewEchoProvider(providerConf)
@@ -24,7 +23,7 @@ func NewProvider(providerConf *config.ProviderConfig) (model.Provider, error) {
 	}
 }
 
-func InitializeProviders(backupConfig *config.BackupConfig) map[string]model.Provider {
+func InitializeProviders(backupConfig *model.BackupConfig) map[string]model.Provider {
 	providers := make(map[string]model.Provider)
 
 	for _, providerConfig := range backupConfig.Providers {

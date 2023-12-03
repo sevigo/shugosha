@@ -9,7 +9,6 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 
-	"github.com/sevigo/shugosha/pkg/db"
 	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/model"
 )
@@ -21,14 +20,14 @@ type BackupResult struct {
 }
 
 type BackupManager struct {
-	db         db.DB
+	db         model.DB
 	providers  map[string]model.Provider // this is an interface
 	resultChan chan BackupResult
 	mu         sync.Mutex // Mutex for thread-safe operations
 }
 
 // NewBackupManager initializes a new BackupManager with the given providers and database path.
-func NewBackupManager(storage db.DB, providers map[string]model.Provider) (*BackupManager, error) {
+func NewBackupManager(storage model.DB, providers map[string]model.Provider) (*BackupManager, error) {
 	slog.Debug("BackupManager initialized")
 	return &BackupManager{
 		db:         storage,

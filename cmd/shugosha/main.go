@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"path/filepath"
 
@@ -116,9 +115,9 @@ func setupAndStartMonitor(providers map[string]model.Provider, backupManager *ba
 
 func processBackupResults(backupManager *backupmanager.BackupManager) {
 	for result := range backupManager.Results() {
-		log.Printf("Backup result for %s: %s\n", result.Path, result.Status)
+		slog.Info("[MAIN] Backup resultn", "path", result.Path, "status", result.Status)
 		if result.Status == "Failed" {
-			log.Printf("Backup error: %s\n", result.Error)
+			slog.Error("Backup error", "error", result.Error)
 		}
 	}
 }

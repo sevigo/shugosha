@@ -2,13 +2,6 @@ package db
 
 import "github.com/dgraph-io/badger/v4"
 
-// DB is an interface for abstracting database operations.
-type DB interface {
-	Get(key string) ([]byte, error)
-	Set(key string, value []byte) error
-	Close() error
-}
-
 // BadgerDB is an implementation of the DB interface using Badger.
 type BadgerDB struct {
 	db *badger.DB

@@ -3,7 +3,8 @@
 .PHONY: build test clean
 
 # Binary name
-BINARY_NAME=fsmonitor
+BINARY_NAME=shugosha
+PROJECT_NAME=shugosha
 
 # Build directory
 BUILD_DIR=./build
@@ -22,10 +23,13 @@ run:
 
 # Build the project
 build: 
-	$(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
+	$(GO_BUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/$(PROJECT_NAME)/main.go
+
+generate:
+	$(GO_RUN) generate ./...
 
 # Run tests
-test: 
+test: generate
 	$(GO_TEST) ./...
 
 # Clean build artifacts
