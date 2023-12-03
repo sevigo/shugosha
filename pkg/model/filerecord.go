@@ -1,4 +1,4 @@
-package backupmanager
+package model
 
 import "time"
 

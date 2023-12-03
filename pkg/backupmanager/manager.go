@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
@@ -45,29 +46,44 @@ func (m *BackupManager) HandleEvent(event fsmonitor.Event) {
 	slog.Debug("[BackupManager] HandleEvent", "type", event.Type, "path", event.Path)
 
 	for _, provider := range m.providers {
+		if !isSubscribed(event.Path, provider.DirectoryList()) {
+			continue
+		}
+
 		// handle event by registered provider
-		go func(provider model.Provider) {
-
-			// check if the file is stored
-			if m.isBackupNeeded(event.Path, event.Checksum, provider.Name()) {
-				slog.Debug("[BackupManager] Backup needed", "path", event.Path, "provider", provider.Name())
-
-				// create backup and communicate the result back
-				result := BackupResult{Path: event.Path, Status: "Success"}
-				if err := provider.Backup(event.Path); err != nil {
-					result.Status = "Failed"
-					result.Error = err.Error()
-					slog.Error("Backup failed", "error", err, "path", event.Path)
-				} else {
-					m.updateRecord(event.Path, event.Checksum, provider.Name())
-				}
-
-				m.resultChan <- result
-			} else {
-				slog.Debug("[BackupManager] No backup needed", "path", event.Path, "provider", provider.Name())
-			}
-		}(provider)
+		go m.handleProviderBackup(event, provider)
 	}
+}
+
+func (m *BackupManager) handleProviderBackup(event fsmonitor.Event, provider model.Provider) {
+	// check if the file is stored
+	if m.isBackupNeeded(event.Path, event.Checksum, provider.Name()) {
+		slog.Debug("[BackupManager] Backup needed", "path", event.Path, "provider", provider.Name())
+
+		// create backup and communicate the result back
+		result := BackupResult{Path: event.Path, Status: "Success"}
+		if err := provider.Backup(event.Path); err != nil {
+			result.Status = "Failed"
+			result.Error = err.Error()
+			slog.Error("Backup failed", "error", err, "path", event.Path)
+		} else {
+			m.updateRecord(event.Path, event.Checksum, provider.Name())
+		}
+
+		m.resultChan <- result
+	} else {
+		slog.Debug("[BackupManager] No backup needed", "path", event.Path, "provider", provider.Name())
+	}
+}
+
+func isSubscribed(filePath string, directoryList []string) bool {
+	for _, dir := range directoryList {
+		if strings.HasPrefix(filePath, dir) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // isBackupNeeded checks if a backup is necessary for a given file path and provider.
@@ -85,7 +101,7 @@ func (m *BackupManager) isBackupNeeded(path, checksum, providerName string) bool
 		return true // Assume backup needed on other errors
 	}
 
-	var record FileRecord
+	var record model.FileRecord
 	if err := json.Unmarshal(value, &record); err != nil {
 		slog.Error("[BackupManager] Error unmarshaling file record", "error", err)
 		return true // Assume backup needed on unmarshal error
@@ -95,49 +111,7 @@ func (m *BackupManager) isBackupNeeded(path, checksum, providerName string) bool
 	return storedChecksum != checksum
 }
 
-func (m *BackupManager) updateRecord(path, checksum, providerName string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Retrieve the current file record or create a new one
-	var record FileRecord
-	value, err := m.db.Get(path)
-	if err != nil {
-		// If an error other than not found, log and exit
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			slog.Error("Failed to retrieve record from DB", "error", err, "path", path)
-			return
-		}
-		// If the record is not found, initialize a new one
-		record = FileRecord{
-			ProviderData: make(map[string]string),
-		}
-	} else {
-		// Unmarshal the existing record
-		if err := json.Unmarshal(value, &record); err != nil {
-			slog.Error("Failed to unmarshal file record", "error", err, "path", path)
-			return
-		}
-	}
-
-	// Update the provider data with the new checksum
-	record.ProviderData[providerName] = checksum
-
-	// Serialize the updated record
-	recordBytes, err := json.Marshal(record)
-	if err != nil {
-		slog.Error("Failed to marshal file record", "error", err, "path", path)
-		return
-	}
-
-	// Update the record in the database
-	if err := m.db.Set(path, recordBytes); err != nil {
-		slog.Error("Failed to update file record in DB", "error", err, "path", path)
-	} else {
-		slog.Debug("Successfully updated file record in DB", "path", path)
-	}
-}
-
 func (m *BackupManager) Close() error {
+	close(m.resultChan) // Ensure the results channel is closed
 	return m.db.Close()
 }
