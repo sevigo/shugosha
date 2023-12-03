@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/sevigo/shugosha/pkg/api"
 	"github.com/sevigo/shugosha/pkg/backupmanager"
 	"github.com/sevigo/shugosha/pkg/config"
 	"github.com/sevigo/shugosha/pkg/db"
@@ -61,11 +62,23 @@ func main() {
 	// Process backup results (optional)
 	go processBackupResults(backupManager)
 
+	if err := startAPIService(configManager); err != nil {
+		slog.Error("Can't start API service", "error", err)
+		return
+	}
+
 	// Wait for user input to stop the monitor
 	waitForUserInput()
 
 	// Stop the monitor
 	stopMonitor(monitor)
+}
+
+// Create and start the API server.
+func startAPIService(cm model.ConfigManager) error {
+	server := api.NewServer(cm)
+	slog.Debug("Starting API server on port 8080...")
+	return server.Start(":8080")
 }
 
 func initializeDatabase() (*db.BadgerDB, error) {

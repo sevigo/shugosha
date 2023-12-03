@@ -5,6 +5,7 @@ go 1.21.4
 require (
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/fsnotify/fsnotify v1.7.0
+	github.com/go-chi/chi/v5 v5.0.10
 	github.com/lmittmann/tint v1.0.3
 	github.com/mattn/go-colorable v0.1.13
 	github.com/stretchr/testify v1.8.4
