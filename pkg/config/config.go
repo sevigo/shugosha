@@ -16,7 +16,7 @@ func LoadDefaultConfig() *model.BackupConfig {
 	case "windows":
 		configPath = "config.win.json"
 	case "darwin":
-		configPath = "config.mac.json"
+		configPath = "../../config.mac.json"
 	case "linux":
 		configPath = "config.linux.json"
 	default:

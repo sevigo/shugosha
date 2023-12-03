@@ -97,9 +97,7 @@ func (m *Monitor) Remove(path string) error {
 }
 
 // Start begins monitoring for file system events.
-func (m *Monitor) Start() {
-	m.eventBuffer = make(map[string][]fsnotify.Event) // Initialize buffer
-
+func (m *Monitor) Start() error {
 	go func() {
 		// Periodic flush timer
 		flushTicker := time.NewTicker(m.flushDelay)
@@ -124,6 +122,8 @@ func (m *Monitor) Start() {
 			}
 		}
 	}()
+
+	return nil
 }
 
 // Stop stops the monitor.

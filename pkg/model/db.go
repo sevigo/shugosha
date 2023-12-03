@@ -11,4 +11,4 @@ type DB interface {
 	Close() error
 }
 
-var ErrDBKeyNotFound = errors.New("Key not found")
+var ErrKeyNotFound = errors.New("Key not found")

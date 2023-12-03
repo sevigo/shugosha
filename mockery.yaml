@@ -1,0 +1,9 @@
+packages:
+  - name: model  # Replace with your actual package name
+    path: ./pkg/model
+    interfaces:
+      - DB
+    output:
+      path: mocks/
+      filename: db.go
+      layout: flat
