@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,10 +179,17 @@ func (m *Monitor) flushEvents() {
 
 // emitEvent triggers the user-defined event handler.
 func (m *Monitor) emitEvent(event Event) {
-	m.subLock.Lock()
-	defer m.subLock.Unlock()
+	// Determine the root directory for the event
+	for root := range m.dirs {
+		if strings.HasPrefix(event.Path, root) {
+			event.Root = root
+			break
+		}
+	}
 
+	m.subLock.Lock()
 	for _, sub := range m.subscribers {
 		sub.HandleEvent(event)
 	}
+	m.subLock.Unlock()
 }

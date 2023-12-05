@@ -11,4 +11,5 @@ type DB interface {
 	Close() error
 }
 
-var ErrKeyNotFound = errors.New("Key not found")
+// ErrDBKeyNotFound is used when a key is not found in the database.
+var ErrDBKeyNotFound = errors.New("key not found in the database")

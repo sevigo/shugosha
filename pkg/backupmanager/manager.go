@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"sync"
-
-	"github.com/dgraph-io/badger/v4"
 
 	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/model"
@@ -17,6 +14,7 @@ type BackupResult struct {
 	Path   string
 	Status string
 	Error  string
+	Size   string
 }
 
 type BackupManager struct {
@@ -29,11 +27,14 @@ type BackupManager struct {
 // NewBackupManager initializes a new BackupManager with the given providers and database path.
 func NewBackupManager(storage model.DB, providers map[string]model.Provider) (*BackupManager, error) {
 	slog.Debug("BackupManager initialized")
-	return &BackupManager{
+
+	bm := &BackupManager{
 		db:         storage,
 		providers:  providers,
 		resultChan: make(chan BackupResult, 10),
-	}, nil
+	}
+
+	return bm, nil
 }
 
 func (m *BackupManager) Results() <-chan BackupResult {
@@ -45,7 +46,7 @@ func (m *BackupManager) HandleEvent(event fsmonitor.Event) {
 	slog.Debug("[BackupManager] HandleEvent", "type", event.Type, "path", event.Path)
 
 	for _, provider := range m.providers {
-		if !isSubscribed(event.Path, provider.DirectoryList()) {
+		if !isSubscribed(event.Root, provider.DirectoryList()) {
 			continue
 		}
 
@@ -61,12 +62,12 @@ func (m *BackupManager) handleProviderBackup(event fsmonitor.Event, provider mod
 
 		// create backup and communicate the result back
 		result := BackupResult{Path: event.Path, Status: "Success"}
-		if err := provider.Backup(event.Path); err != nil {
+		if err := provider.Backup(event); err != nil {
 			result.Status = "Failed"
 			result.Error = err.Error()
 			slog.Error("Backup failed", "error", err, "path", event.Path)
 		} else {
-			m.updateRecord(event.Path, event.Checksum, provider.Name())
+			m.updateRecord(provider.Name(), &event)
 		}
 
 		m.resultChan <- result
@@ -75,9 +76,9 @@ func (m *BackupManager) handleProviderBackup(event fsmonitor.Event, provider mod
 	}
 }
 
-func isSubscribed(filePath string, directoryList []string) bool {
+func isSubscribed(root string, directoryList []string) bool {
 	for _, dir := range directoryList {
-		if strings.HasPrefix(filePath, dir) {
+		if dir == root {
 			return true
 		}
 	}
@@ -93,7 +94,7 @@ func (m *BackupManager) isBackupNeeded(path, checksum, providerName string) bool
 	value, err := m.db.Get(path)
 	if err != nil {
 		// Handle not found as a need for backup
-		if errors.Is(err, badger.ErrKeyNotFound) {
+		if errors.Is(err, model.ErrDBKeyNotFound) {
 			return true
 		}
 		slog.Error("[BackupManager] Error accessing DB", "error", err)

@@ -6,35 +6,38 @@ import (
 	"log/slog"
 
 	"github.com/dgraph-io/badger/v4"
+
+	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/model"
 )
 
-func (m *BackupManager) updateRecord(path, checksum, providerName string) {
+func (m *BackupManager) updateRecord(providerName string, event *fsmonitor.Event) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	slog.Debug("[BackupManager] update record", "providerName", providerName, "key", path)
+	slog.Debug("[BackupManager] update record", "providerName", providerName, "key", event.Path)
 
-	record, err := m.getOrCreateRecord(path)
+	record, err := m.getOrCreateRecord(event)
 	if err != nil {
-		slog.Error("Failed to get or create record", "error", err, "key", path)
+		slog.Error("Failed to get or create record", "error", err, "key", event.Path)
 		return
 	}
 
-	if err := m.updateProviderData(record, providerName, checksum); err != nil {
-		slog.Error("Failed to update provider data", "error", err, "key", path)
+	if err := m.updateProviderData(record, providerName, event); err != nil {
+		slog.Error("Failed to update provider data", "error", err, "key", event.Path)
 		return
 	}
 
-	if err := m.saveRecord(path, record); err != nil {
-		slog.Error("Failed to save updated record to DB", "error", err, "key", path)
+	if err := m.saveRecord(event.Path, record); err != nil {
+		slog.Error("Failed to save updated record to DB", "error", err, "key", event.Path)
 	}
 }
 
-func (m *BackupManager) getOrCreateRecord(path string) (*model.FileRecord, error) {
+func (m *BackupManager) getOrCreateRecord(event *fsmonitor.Event) (*model.FileRecord, error) {
+	key := event.Path
 	record := &model.FileRecord{}
 
-	value, err := m.db.Get(path)
+	value, err := m.db.Get(key)
 	if err != nil {
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			return &model.FileRecord{ProviderData: make(map[string]string)}, nil
@@ -49,8 +52,13 @@ func (m *BackupManager) getOrCreateRecord(path string) (*model.FileRecord, error
 	return record, nil
 }
 
-func (m *BackupManager) updateProviderData(record *model.FileRecord, providerName, checksum string) error {
-	record.ProviderData[providerName] = checksum
+func (m *BackupManager) updateProviderData(record *model.FileRecord, providerName string, event *fsmonitor.Event) error {
+	record.ProviderData[providerName] = event.Checksum
+	record.Root = event.Root
+	record.Size = event.Size
+
+	m.updateTotalSize(providerName, event.Root, event.Size)
+
 	return nil
 }
 

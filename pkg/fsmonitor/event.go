@@ -8,6 +8,7 @@ import (
 
 // Event represents a file system event.
 type Event struct {
+	Root      string
 	Path      string    // Path of the file/directory
 	Type      string    // Type of event: "added", "changed", "deleted", "renamed"
 	Timestamp time.Time // Time of the event
