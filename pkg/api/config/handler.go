@@ -1,4 +1,4 @@
-package api
+package config
 
 import (
 	"encoding/json"
@@ -7,9 +7,19 @@ import (
 	"github.com/sevigo/shugosha/pkg/model"
 )
 
+type configHandler struct {
+	configManager model.ConfigManager
+}
+
+func NewConfigHandler(configManger model.ConfigManager) *configHandler {
+	return &configHandler{
+		configManager: configManger,
+	}
+}
+
 // readConfigHandler handles requests to read the configuration.
-func (s *Server) readConfigHandler(w http.ResponseWriter, r *http.Request) {
-	config, err := s.configManager.LoadConfig()
+func (h *configHandler) ReadConfigHandler(w http.ResponseWriter, r *http.Request) {
+	config, err := h.configManager.LoadConfig()
 	if err != nil {
 		http.Error(w, "Failed to read config: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -20,14 +30,14 @@ func (s *Server) readConfigHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateConfigHandler handles requests to update the configuration.
-func (s *Server) updateConfigHandler(w http.ResponseWriter, r *http.Request) {
+func (h *configHandler) UpdateConfigHandler(w http.ResponseWriter, r *http.Request) {
 	var newConfig model.BackupConfig
 	if err := json.NewDecoder(r.Body).Decode(&newConfig); err != nil {
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := s.configManager.SaveConfig(&newConfig); err != nil {
+	if err := h.configManager.SaveConfig(&newConfig); err != nil {
 		http.Error(w, "Failed to update config: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -11,11 +11,13 @@ if "%1"=="" goto help
 
 if "%1" == "init" (
     Import-Module posh-git
+    goto end
 )
 
 REM Run the project
 if "%1"=="run" (
-    %GO_CMD% run cmd\shugosha\main.go
+    cd cmd/shugosha
+    go run main.go wire_gen.go
     goto end
 )
 

@@ -14,7 +14,7 @@ func LoadDefaultConfig() *model.BackupConfig {
 	var configPath string
 	switch runtime.GOOS {
 	case "windows":
-		configPath = "config.win.json"
+		configPath = "../../config.win.json"
 	case "darwin":
 		configPath = "../../config.mac.json"
 	case "linux":

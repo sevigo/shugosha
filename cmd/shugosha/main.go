@@ -1,9 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/sevigo/shugosha/pkg/backupmanager"
 	"github.com/sevigo/shugosha/pkg/logger"
@@ -17,9 +19,13 @@ func main() {
 
 	app, err := InitializeApp()
 	if err != nil {
-		slog.Error("Failed to initialize applicationv", "error", err)
+		slog.Error("Failed to initialize application", "error", err)
 		return
 	}
+
+	// Setting up signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start the file system monitor
 	go func() {
@@ -40,9 +46,8 @@ func main() {
 		}
 	}()
 
-	// Wait for user input to stop the application
-	fmt.Println("Press ENTER to stop...")
-	fmt.Scanln()
+	// Wait for termination signal
+	<-sigChan
 
 	// Stop the monitor and other services before exiting
 	if err := app.Monitor.Stop(); err != nil {
