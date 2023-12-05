@@ -1,29 +1,8 @@
 {
     "Providers": [
         {
-            "Name": "Test",
+            "Name": "For local testing",
             "Type": "Echo",
-            "Settings": {},
-            "DirectoryList": [
-                "/Users/igor.komlew/Downloads",
-                "/Users/igor.komlew/Test"
-            ]
-        },
-        {
-            "Name": "LocalBackup",
-            "Type": "Local",
-            "Settings": {
-                "path": "/local/backup"
-            },
-            "DirectoryList": []
-        },
-        {
-            "Name": "CloudBackup",
-            "Type": "AWS",
-            "Settings": {
-                "accessKey": "key",
-                "secretKey": "secret"
-            },
             "DirectoryList": []
         }
     ]

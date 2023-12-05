@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/sevigo/shugosha/pkg/model"
 )
@@ -28,6 +29,9 @@ func NewServer(cm model.ConfigManager) *Server {
 
 // routes defines all the routes for the API server.
 func (s *Server) routes() {
+	s.router.Use(middleware.Logger)
+	s.router.Use(middleware.Recoverer)
+
 	s.router.Get("/config", s.readConfigHandler)
 	s.router.Post("/config", s.updateConfigHandler)
 }
