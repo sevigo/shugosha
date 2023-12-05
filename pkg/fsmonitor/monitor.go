@@ -2,6 +2,7 @@
 package fsmonitor
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -97,7 +98,7 @@ func (m *Monitor) Remove(path string) error {
 }
 
 // Start begins monitoring for file system events.
-func (m *Monitor) Start() error {
+func (m *Monitor) Start(ctx context.Context) error {
 	go func() {
 		// Periodic flush timer
 		flushTicker := time.NewTicker(m.flushDelay)
@@ -119,6 +120,13 @@ func (m *Monitor) Start() error {
 
 			case <-flushTicker.C:
 				m.flushEvents()
+
+			case <-ctx.Done():
+				// Context is cancelled, perform cleanup and exit
+				if err := m.Stop(); err != nil {
+					slog.Error("Failed to stop monitor on context cancellation", "error", err)
+				}
+				return
 			}
 		}
 	}()

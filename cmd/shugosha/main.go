@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"github.com/sevigo/shugosha/pkg/logger"
 )
 
-const version = 0.2
+const version = 0.3
 
 func main() {
 	logger.Setup()
@@ -23,24 +24,27 @@ func main() {
 		return
 	}
 
+	// Create a context that is cancelled on program termination
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// Setting up signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start the file system monitor
+	// Start the file system monitor with context
 	go func() {
-		if err := app.Monitor.Start(); err != nil {
+		if err := app.Monitor.Start(ctx); err != nil {
 			slog.Error("Failed to start file system monitor", "error", err)
 		}
 	}()
 
 	// Process backup results
-	go processBackupResults(app.BackupManager)
+	go processBackupResults(ctx, app.BackupManager)
 
-	// Start the API server
+	// Start the API server with context
 	go func() {
 		log.Println("Starting API server on port 8080...")
-		if err := app.Server.Start(":8080"); err != nil {
+		if err := app.Server.Start(ctx, ":8080"); err != nil {
 			slog.Error("Failed to start API server", "error", err)
 			return
 		}
@@ -48,21 +52,26 @@ func main() {
 
 	// Wait for termination signal
 	<-sigChan
+	cancel() // Cancels the context
 
-	// Stop the monitor and other services before exiting
-	if err := app.Monitor.Stop(); err != nil {
-		slog.Error("Failed to stop monitor", "error", err)
-	}
+	// Wait for a moment to allow goroutines to finish gracefully
+	// ...
 
 	slog.Info("「Shugosha」 service stopped")
 }
 
-func processBackupResults(manager *backupmanager.BackupManager) {
-	for result := range manager.Results() {
-		if result.Status == "Failed" {
-			log.Printf("Backup failed for %s: %v", result.Path, result.Error)
-		} else {
-			log.Printf("Backup successful for %s", result.Path)
+func processBackupResults(ctx context.Context, manager *backupmanager.BackupManager) {
+	for {
+		select {
+		case result := <-manager.Results():
+			if result.Status == "Failed" {
+				log.Printf("Backup failed for %s: %v", result.Path, result.Error)
+			} else {
+				log.Printf("Backup successful for %s", result.Path)
+			}
+		case <-ctx.Done():
+			log.Println("Shutting down backup results processing...")
+			return
 		}
 	}
 }

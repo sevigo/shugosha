@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -53,6 +54,6 @@ func (s *Server) routes() {
 }
 
 // Start starts the API server on the specified port.
-func (s *Server) Start(port string) error {
+func (s *Server) Start(ctx context.Context, port string) error {
 	return http.ListenAndServe(port, s.router)
 }

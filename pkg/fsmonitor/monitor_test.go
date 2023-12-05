@@ -1,6 +1,7 @@
 package fsmonitor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -60,7 +61,7 @@ func TestMonitorEvent(t *testing.T) {
 	assert.NoError(t, monitor.Add(watchedDir), "Failed to add directory to monitor")
 
 	// Start monitoring
-	go monitor.Start()
+	go monitor.Start(context.TODO())
 
 	// Perform a file operation to trigger an event
 	newFilePath := filepath.Join(watchedDir, "newfile.txt")
@@ -90,7 +91,7 @@ func TestMonitorRemove(t *testing.T) {
 	monitor.Subscribe(subscriber)
 
 	assert.NoError(t, monitor.Add(watchedDir))
-	go monitor.Start()
+	go monitor.Start(context.TODO())
 
 	// Create a new file to trigger an event
 	testFilePath := filepath.Join(watchedDir, "remove_test.txt")
@@ -132,7 +133,7 @@ func TestMonitorUnsubscribe(t *testing.T) {
 	monitor.Subscribe(subscriber)
 
 	assert.NoError(t, monitor.Add(watchedDir))
-	go monitor.Start()
+	go monitor.Start(context.TODO())
 
 	// Create a new file to trigger an event
 	testFilePath := filepath.Join(watchedDir, "unsubscribe_test.txt")
