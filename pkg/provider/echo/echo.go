@@ -3,7 +3,6 @@ package echo
 import (
 	"fmt"
 
-	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/model"
 )
 
@@ -20,7 +19,7 @@ func NewEchoProvider(providerConfig *model.ProviderConfig) (model.Provider, erro
 }
 
 // Backup logs the file change event.
-func (p *provider) Backup(event fsmonitor.Event) error {
+func (p *provider) Backup(event model.Event) error {
 	fmt.Printf("[Echo] Backing up - %q\n", event.Path)
 	return nil
 }

@@ -21,6 +21,6 @@
 go.work
 
 .db/
-.vscode/
+# .vscode/
 build/
 bin/

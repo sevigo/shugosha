@@ -1,0 +1,5 @@
+### get configs
+GET http://localhost:8080/api/config
+
+### get providers
+GET http://localhost:8080/api/providers

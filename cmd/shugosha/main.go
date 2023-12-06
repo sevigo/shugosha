@@ -54,9 +54,6 @@ func main() {
 	<-sigChan
 	cancel() // Cancels the context
 
-	// Wait for a moment to allow goroutines to finish gracefully
-	// ...
-
 	slog.Info("「Shugosha」 service stopped")
 }
 

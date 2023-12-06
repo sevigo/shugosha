@@ -7,16 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sevigo/shugosha/pkg/model"
 	"github.com/stretchr/testify/assert"
 )
 
 // echoSubscriber is a simple subscriber that sends them back to a channel for testing.
 type echoSubscriber struct {
-	EventChannel chan Event
+	EventChannel chan model.Event
 }
 
 // HandleEvent is called when a file system event is received.
-func (s *echoSubscriber) HandleEvent(event Event) {
+func (s *echoSubscriber) HandleEvent(event model.Event) {
 	// Send the event to the channel for testing
 	if s.EventChannel != nil {
 		s.EventChannel <- event
@@ -53,7 +54,7 @@ func TestMonitorEvent(t *testing.T) {
 	defer monitor.Stop()
 
 	// Custom subscriber to record events
-	events := make(chan Event, 10) // Buffered channel
+	events := make(chan model.Event, 10) // Buffered channel
 	subscriber := &echoSubscriber{EventChannel: events}
 	monitor.Subscribe(subscriber)
 
@@ -86,7 +87,7 @@ func TestMonitorRemove(t *testing.T) {
 	assert.NoError(t, err)
 	defer monitor.Stop()
 
-	events := make(chan Event, 10)
+	events := make(chan model.Event, 10)
 	subscriber := &echoSubscriber{EventChannel: events}
 	monitor.Subscribe(subscriber)
 
@@ -128,7 +129,7 @@ func TestMonitorUnsubscribe(t *testing.T) {
 	assert.NoError(t, err)
 	defer monitor.Stop()
 
-	events := make(chan Event, 10)
+	events := make(chan model.Event, 10)
 	subscriber := &echoSubscriber{EventChannel: events}
 	monitor.Subscribe(subscriber)
 

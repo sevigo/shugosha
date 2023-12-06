@@ -14,7 +14,6 @@ type BackupResult struct {
 	Path   string
 	Status string
 	Error  string
-	Size   string
 }
 
 type BackupManager struct {
@@ -25,7 +24,7 @@ type BackupManager struct {
 }
 
 // NewBackupManager initializes a new BackupManager with the given providers and database path.
-func NewBackupManager(storage model.DB, providers map[string]model.Provider) (*BackupManager, error) {
+func NewBackupManager(storage model.DB, monitor *fsmonitor.Monitor, providers map[string]model.Provider) (*BackupManager, error) {
 	slog.Debug("BackupManager initialized")
 
 	bm := &BackupManager{
@@ -33,6 +32,23 @@ func NewBackupManager(storage model.DB, providers map[string]model.Provider) (*B
 		providers:  providers,
 		resultChan: make(chan BackupResult, 10),
 	}
+
+	// Extract provider names from the providers map
+	providerNames := make([]string, 0, len(providers))
+	for name, provider := range providers {
+		providerNames = append(providerNames, name)
+		for _, rootDir := range provider.DirectoryList() {
+			bm.updateTotalSize(name, rootDir, 0)
+			monitor.Add(rootDir)
+		}
+	}
+
+	// Store the provider names using SetProviders method
+	if err := bm.SetProviders(providerNames); err != nil {
+		return nil, err
+	}
+
+	monitor.Subscribe(bm)
 
 	return bm, nil
 }
@@ -42,7 +58,7 @@ func (m *BackupManager) Results() <-chan BackupResult {
 }
 
 // HandleEvent handles filesystem events and initiates backups if needed.
-func (m *BackupManager) HandleEvent(event fsmonitor.Event) {
+func (m *BackupManager) HandleEvent(event model.Event) {
 	slog.Debug("[BackupManager] HandleEvent", "type", event.Type, "path", event.Path)
 
 	for _, provider := range m.providers {
@@ -55,7 +71,7 @@ func (m *BackupManager) HandleEvent(event fsmonitor.Event) {
 	}
 }
 
-func (m *BackupManager) handleProviderBackup(event fsmonitor.Event, provider model.Provider) {
+func (m *BackupManager) handleProviderBackup(event model.Event, provider model.Provider) {
 	// check if the file is stored
 	if m.isBackupNeeded(event.Path, event.Checksum, provider.Name()) {
 		slog.Debug("[BackupManager] Backup needed", "path", event.Path, "provider", provider.Name())

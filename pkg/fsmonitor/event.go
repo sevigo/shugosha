@@ -4,23 +4,12 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/sevigo/shugosha/pkg/model"
 )
 
-// Event represents a file system event.
-type Event struct {
-	Root      string
-	Path      string    // Path of the file/directory
-	Type      string    // Type of event: "added", "changed", "deleted", "renamed"
-	Timestamp time.Time // Time of the event
-	Checksum  string    // SHA256 checksum of the file
-	Size      int64     // Size of the file in bytes
-}
-
-// EventHandler is the function type for handling file system events.
-type EventHandler func(Event)
-
 // determineFinalEvent analyzes a slice of events and returns the final event.
-func determineFinalEvent(events []fsnotify.Event) *Event {
+func determineFinalEvent(events []fsnotify.Event) *model.Event {
 	var created, changed, removed, renamed bool
 	var lastEvent fsnotify.Event
 
@@ -53,7 +42,7 @@ func determineFinalEvent(events []fsnotify.Event) *Event {
 	}
 
 	sum, size, _ := getFileChecksumAndSize(lastEvent.Name)
-	return &Event{
+	return &model.Event{
 		Path:      lastEvent.Name,
 		Type:      finalType,
 		Timestamp: time.Now(),

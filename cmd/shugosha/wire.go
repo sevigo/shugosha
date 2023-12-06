@@ -45,6 +45,7 @@ func InitializeApp() (*App, error) {
 		apiServiceProvider,
 		dbProvider,
 		backupConfigProvider,
+		providerMetaInfoGetterProvider,
 	)
 	return &App{}, nil
 }
@@ -57,8 +58,8 @@ func fsMonitorProvider() (*fsmonitor.Monitor, error) {
 	return monitor, nil
 }
 
-func backupManagerProvider(storage model.DB, providers map[string]model.Provider) (*backupmanager.BackupManager, error) {
-	backupManager, err := backupmanager.NewBackupManager(storage, providers)
+func backupManagerProvider(storage model.DB, monitor *fsmonitor.Monitor, providers map[string]model.Provider) (*backupmanager.BackupManager, error) {
+	backupManager, err := backupmanager.NewBackupManager(storage, monitor, providers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup manager: %w", err)
 	}
@@ -73,8 +74,8 @@ func dbProvider() (model.DB, error) {
 	return storage, nil
 }
 
-func apiServiceProvider(cm model.ConfigManager) *api.Server {
-	return api.NewServer(cm)
+func apiServiceProvider(cm model.ConfigManager, g model.ProviderMetaInfoGetter) *api.Server {
+	return api.NewServer(cm, g)
 }
 
 func configManagerProvider(storage model.DB) (model.ConfigManager, error) {
@@ -92,4 +93,8 @@ func backupProviders(backupConfig *model.BackupConfig) map[string]model.Provider
 
 func backupConfigProvider(configManager model.ConfigManager) (*model.BackupConfig, error) {
 	return configManager.LoadConfig()
+}
+
+func providerMetaInfoGetterProvider(bm *backupmanager.BackupManager) model.ProviderMetaInfoGetter {
+	return bm
 }

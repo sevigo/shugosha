@@ -9,20 +9,23 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/sevigo/shugosha/pkg/api/config"
+	"github.com/sevigo/shugosha/pkg/api/provider"
 	"github.com/sevigo/shugosha/pkg/model"
 )
 
 // Server represents the API server.
 type Server struct {
-	configManager model.ConfigManager
-	router        *chi.Mux
+	providerManger model.ProviderMetaInfoGetter
+	configManager  model.ConfigManager
+	router         *chi.Mux
 }
 
 // NewServer creates a new API server.
-func NewServer(cm model.ConfigManager) *Server {
+func NewServer(cm model.ConfigManager, pm model.ProviderMetaInfoGetter) *Server {
 	s := &Server{
-		configManager: cm,
-		router:        chi.NewRouter(),
+		providerManger: pm,
+		configManager:  cm,
+		router:         chi.NewRouter(),
 	}
 
 	s.routes()
@@ -51,6 +54,7 @@ func (s *Server) routes() {
 
 	s.router.Get("/api/config", configHandler.ReadConfigHandler)
 	s.router.Post("/api/config", configHandler.UpdateConfigHandler)
+	s.router.Get("/api/providers", provider.NewProviderInfoHandler(s.providerManger))
 }
 
 // Start starts the API server on the specified port.

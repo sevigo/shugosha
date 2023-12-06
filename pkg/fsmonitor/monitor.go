@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/sevigo/shugosha/pkg/model"
 )
 
 // Monitor provides file system monitoring.
@@ -21,7 +22,7 @@ type Monitor struct {
 	bufferLock  sync.Mutex
 	flushTimer  *time.Timer
 	flushDelay  time.Duration
-	subscribers []Subscriber
+	subscribers []model.Subscriber
 	subLock     sync.Mutex // Protects the subscribers slice
 }
 
@@ -36,13 +37,13 @@ func New(cfg *Config) (*Monitor, error) {
 		watcher:     watcher,
 		eventBuffer: make(map[string][]fsnotify.Event), // Initialize the eventBuffer
 		flushDelay:  cfg.FlushDelay,
-		subscribers: make([]Subscriber, 0),
+		subscribers: make([]model.Subscriber, 0),
 		dirs:        make(map[string]int),
 	}, nil
 }
 
 // Subscribe adds a new subscriber to the Monitor.
-func (m *Monitor) Subscribe(sub Subscriber) {
+func (m *Monitor) Subscribe(sub model.Subscriber) {
 	m.subLock.Lock()
 	defer m.subLock.Unlock()
 
@@ -50,7 +51,7 @@ func (m *Monitor) Subscribe(sub Subscriber) {
 }
 
 // Unsubscribe removes a subscriber from the Monitor.
-func (m *Monitor) Unsubscribe(sub Subscriber) {
+func (m *Monitor) Unsubscribe(sub model.Subscriber) {
 	m.subLock.Lock()
 	defer m.subLock.Unlock()
 
@@ -178,7 +179,7 @@ func (m *Monitor) flushEvents() {
 }
 
 // emitEvent triggers the user-defined event handler.
-func (m *Monitor) emitEvent(event Event) {
+func (m *Monitor) emitEvent(event model.Event) {
 	// Determine the root directory for the event
 	for root := range m.dirs {
 		if strings.HasPrefix(event.Path, root) {
