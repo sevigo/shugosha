@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/sevigo/shugosha/pkg/fsmonitor"
 	"github.com/sevigo/shugosha/pkg/model"
 	"github.com/sevigo/shugosha/pkg/provider/echo"
 )
@@ -23,7 +24,7 @@ func NewProvider(providerConf *model.ProviderConfig) (model.Provider, error) {
 	}
 }
 
-func InitializeProviders(backupConfig *model.BackupConfig) map[string]model.Provider {
+func InitializeProviders(backupConfig *model.BackupConfig, monitor *fsmonitor.Monitor) map[string]model.Provider {
 	providers := make(map[string]model.Provider)
 
 	for _, providerConfig := range backupConfig.Providers {
@@ -32,6 +33,12 @@ func InitializeProviders(backupConfig *model.BackupConfig) map[string]model.Prov
 			slog.Error("Error initializing provider", "error", err, "provider", providerConfig.Name)
 			continue
 		}
+
+		// add the subscription
+		for _, dir := range provider.DirectoryList() {
+			monitor.Add(dir)
+		}
+
 		providers[provider.Name()] = provider
 	}
 

@@ -42,6 +42,17 @@ func New(cfg *Config) (*Monitor, error) {
 	}, nil
 }
 
+func (m *Monitor) RootDirs() []string {
+	dirs := []string{}
+	for dir, index := range m.dirs {
+		if index > 0 {
+			dirs = append(dirs, dir)
+		}
+	}
+
+	return dirs
+}
+
 // Subscribe adds a new subscriber to the Monitor.
 func (m *Monitor) Subscribe(sub model.Subscriber) {
 	m.subLock.Lock()
@@ -155,8 +166,10 @@ func (m *Monitor) handleEvent(event fsnotify.Event) {
 	m.eventBuffer[event.Name] = append(m.eventBuffer[event.Name], event)
 
 	// Reset the flush timer
-	if m.flushTimer != nil {
-		m.flushTimer.Stop()
+	if m.flushTimer == nil {
+		m.flushTimer = time.AfterFunc(m.flushDelay, m.flushEvents)
+	} else {
+		m.flushTimer.Reset(m.flushDelay)
 	}
 
 	m.flushTimer = time.AfterFunc(m.flushDelay, m.flushEvents)

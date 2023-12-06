@@ -19,12 +19,8 @@ func (m *BackupManager) GetMetaInfo(providerName string) (*model.ProviderMetaInf
 	providerMeta := &model.ProviderMetaInfo{}
 
 	value, err := m.db.Get(key)
-	if err := handleError(err, "Failed to get provider meta info"); err != nil {
-		return nil, err
-	}
-
-	if len(value) == 0 {
-		return providerMeta, nil
+	if err != nil {
+		return nil, handleError(err, "Failed to get provider meta info")
 	}
 
 	if err := json.Unmarshal(value, providerMeta); err != nil {
@@ -36,50 +32,59 @@ func (m *BackupManager) GetMetaInfo(providerName string) (*model.ProviderMetaInf
 
 func (m *BackupManager) updateTotalSize(providerName, rootDir string, size int64) {
 	key := fmt.Sprintf("meta:%s", providerName)
-	providerMeta := model.ProviderMetaInfo{}
+	slog.Debug("[BackupManager] update total size", "providerName", providerName, "key", key, "size", size, "root", rootDir)
 
-	value, err := m.db.Get(key)
-	if err := handleError(err, "Failed to get provider meta info"); err != nil {
+	providerMeta, err := m.getProviderMeta(key, providerName)
+	if err != nil {
+		slog.Error("Failed to get or unmarshal provider meta info", "error", err)
 		return
 	}
 
-	if len(value) > 0 {
-		if err := json.Unmarshal(value, &providerMeta); err != nil {
-			handleError(err, "Failed to unmarshal provider meta info")
-			return
-		}
-	} else {
-		providerMeta = model.ProviderMetaInfo{Name: providerName, Directories: make(map[string]uint64)}
+	// Update the size for the specified directory
+	providerMeta.Directories[rootDir] += uint64(size)
+	slog.Debug("[BackupManager] new total size is", "providerName", providerName, "key", key, "size", providerMeta.Directories[rootDir], "root", rootDir)
+
+	// Marshal and save the updated provider meta
+	if err := m.saveProviderMeta(key, providerMeta); err != nil {
+		slog.Error("Failed to marshal or save provider meta info", "error", err)
+	}
+}
+
+func (m *BackupManager) getProviderMeta(key, providerName string) (*model.ProviderMetaInfo, error) {
+	value, err := m.db.Get(key)
+	if err != nil && !errors.Is(err, model.ErrDBKeyNotFound) {
+		return nil, err
 	}
 
-	providerMeta.Directories[rootDir] += uint64(size)
+	providerMeta := &model.ProviderMetaInfo{Name: providerName, Directories: map[string]uint64{}}
+	if value != nil {
+		if err := json.Unmarshal(value, providerMeta); err != nil {
+			return nil, err
+		}
+	}
+	return providerMeta, nil
+}
+
+func (m *BackupManager) saveProviderMeta(key string, providerMeta *model.ProviderMetaInfo) error {
 	updatedValue, err := json.Marshal(providerMeta)
 	if err != nil {
-		handleError(err, "Failed to marshal provider meta info")
-		return
+		return err
 	}
-
-	if err := m.db.Set(key, updatedValue); err != nil {
-		handleError(err, "Failed to save provider meta info")
-	}
+	return m.db.Set(key, updatedValue)
 }
 
 func (b *BackupManager) SetProviders(providers []string) error {
 	data, err := json.Marshal(providers)
 	if err != nil {
-		return err
+		return handleError(err, "Failed to marshal providers")
 	}
 	return b.db.Set(providersKey, data)
 }
 
 func (b *BackupManager) GetProviders() ([]string, error) {
 	data, err := b.db.Get(providersKey)
-	if err := handleError(err, "Failed to get providers"); err != nil {
-		return nil, err
-	}
-
-	if len(data) == 0 {
-		return []string{}, nil
+	if err != nil {
+		return nil, handleError(err, "Failed to get providers")
 	}
 
 	var providers []string
@@ -92,11 +97,9 @@ func (b *BackupManager) GetProviders() ([]string, error) {
 
 // Utility function to handle common error checks
 func handleError(err error, message string) error {
-	if errors.Is(err, model.ErrDBKeyNotFound) {
+	if err == nil || errors.Is(err, model.ErrDBKeyNotFound) {
 		return nil
 	}
-	if err != nil {
-		slog.Error(message, "error", err)
-	}
+	slog.Error(message, "error", err)
 	return err
 }

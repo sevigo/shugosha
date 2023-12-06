@@ -1,6 +1,7 @@
 package backupmanager
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -18,32 +19,32 @@ type BackupResult struct {
 
 type BackupManager struct {
 	db         model.DB
-	providers  map[string]model.Provider // this is an interface
+	providers  map[string]model.Provider
 	resultChan chan BackupResult
-	mu         sync.Mutex // Mutex for thread-safe operations
+	mu         sync.Mutex
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
-// NewBackupManager initializes a new BackupManager with the given providers and database path.
 func NewBackupManager(storage model.DB, monitor *fsmonitor.Monitor, providers map[string]model.Provider) (*BackupManager, error) {
-	slog.Debug("BackupManager initialized")
-
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	bm := &BackupManager{
 		db:         storage,
 		providers:  providers,
 		resultChan: make(chan BackupResult, 10),
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
 	}
 
-	// Extract provider names from the providers map
-	providerNames := make([]string, 0, len(providers))
-	for name, provider := range providers {
-		providerNames = append(providerNames, name)
-		for _, rootDir := range provider.DirectoryList() {
-			bm.updateTotalSize(name, rootDir, 0)
-			monitor.Add(rootDir)
+	for _, rootDir := range monitor.RootDirs() {
+		for _, provider := range providers {
+			if isSubscribed(rootDir, provider) {
+				bm.updateTotalSize(provider.Name(), rootDir, 0)
+			}
 		}
 	}
 
-	// Store the provider names using SetProviders method
+	providerNames := extractProviderNames(providers)
 	if err := bm.SetProviders(providerNames); err != nil {
 		return nil, err
 	}
@@ -53,47 +54,32 @@ func NewBackupManager(storage model.DB, monitor *fsmonitor.Monitor, providers ma
 	return bm, nil
 }
 
+func extractProviderNames(providers map[string]model.Provider) []string {
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	return names
+}
+
 func (m *BackupManager) Results() <-chan BackupResult {
 	return m.resultChan
 }
 
-// HandleEvent handles filesystem events and initiates backups if needed.
 func (m *BackupManager) HandleEvent(event model.Event) {
-	slog.Debug("[BackupManager] HandleEvent", "type", event.Type, "path", event.Path)
+	slog.Debug("[manager] handle event", "file", event.Path)
 
-	for _, provider := range m.providers {
-		if !isSubscribed(event.Root, provider.DirectoryList()) {
-			continue
+	for name, provider := range m.providers {
+		if isSubscribed(event.Root, provider) {
+			go m.backupIfNeeded(event, name, provider)
 		}
-
-		// handle event by registered provider
-		go m.handleProviderBackup(event, provider)
 	}
 }
 
-func (m *BackupManager) handleProviderBackup(event model.Event, provider model.Provider) {
-	// check if the file is stored
-	if m.isBackupNeeded(event.Path, event.Checksum, provider.Name()) {
-		slog.Debug("[BackupManager] Backup needed", "path", event.Path, "provider", provider.Name())
+func isSubscribed(root string, provider model.Provider) bool {
+	slog.Debug("[manager] is subscribed", "root", root, "dirs", provider.DirectoryList())
 
-		// create backup and communicate the result back
-		result := BackupResult{Path: event.Path, Status: "Success"}
-		if err := provider.Backup(event); err != nil {
-			result.Status = "Failed"
-			result.Error = err.Error()
-			slog.Error("Backup failed", "error", err, "path", event.Path)
-		} else {
-			m.updateRecord(provider.Name(), &event)
-		}
-
-		m.resultChan <- result
-	} else {
-		slog.Debug("[BackupManager] No backup needed", "path", event.Path, "provider", provider.Name())
-	}
-}
-
-func isSubscribed(root string, directoryList []string) bool {
-	for _, dir := range directoryList {
+	for _, dir := range provider.DirectoryList() {
 		if dir == root {
 			return true
 		}
@@ -102,32 +88,66 @@ func isSubscribed(root string, directoryList []string) bool {
 	return false
 }
 
-// isBackupNeeded checks if a backup is necessary for a given file path and provider.
+func (m *BackupManager) backupIfNeeded(event model.Event, providerName string, provider model.Provider) {
+	slog.Debug("[manager] backup if needed", "providerName", providerName, "file", event.Path)
+
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+		if m.isBackupNeeded(event.Path, event.Checksum, providerName) {
+			m.processBackup(event, provider)
+		}
+	}
+}
+
+func (m *BackupManager) processBackup(event model.Event, provider model.Provider) {
+	slog.Debug("[manager] process backup", "providerName", provider.Name(), "file", event.Path)
+
+	result := BackupResult{Path: event.Path, Status: "Success"}
+	if err := provider.Backup(event); err != nil {
+		result.Status = "Failed"
+		result.Error = err.Error()
+		slog.Error("Backup failed", "error", err, "path", event.Path)
+	} else {
+		m.updateRecord(provider.Name(), event)
+	}
+	
+	m.resultChan <- result
+}
+
 func (m *BackupManager) isBackupNeeded(path, checksum, providerName string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	value, err := m.db.Get(path)
+	key := providerName + ":" + path
+	record, err := m.getRecord(key)
 	if err != nil {
-		// Handle not found as a need for backup
-		if errors.Is(err, model.ErrDBKeyNotFound) {
-			return true
-		}
-		slog.Error("[BackupManager] Error accessing DB", "error", err)
-		return true // Assume backup needed on other errors
+		return true
 	}
 
-	var record model.FileRecord
+	return record.Checksum != checksum
+}
+
+func (m *BackupManager) getRecord(key string) (*model.Event, error) {
+	value, err := m.db.Get(key)
+	if errors.Is(err, model.ErrDBKeyNotFound) {
+		return &model.Event{}, nil
+	} else if err != nil {
+		slog.Error("[BackupManager] Error accessing DB", "error", err)
+		return nil, err
+	}
+
+	var record model.Event
 	if err := json.Unmarshal(value, &record); err != nil {
 		slog.Error("[BackupManager] Error unmarshaling file record", "error", err)
-		return true // Assume backup needed on unmarshal error
+		return nil, err
 	}
-
-	storedChecksum := record.ProviderData[providerName]
-	return storedChecksum != checksum
+	return &record, nil
 }
 
 func (m *BackupManager) Close() error {
-	close(m.resultChan) // Ensure the results channel is closed
+	m.cancelFunc()
+	close(m.resultChan)
 	return m.db.Close()
 }

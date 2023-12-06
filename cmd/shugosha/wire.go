@@ -87,8 +87,8 @@ func configManagerProvider(storage model.DB) (model.ConfigManager, error) {
 	return configManager, nil
 }
 
-func backupProviders(backupConfig *model.BackupConfig) map[string]model.Provider {
-	return provider.InitializeProviders(backupConfig)
+func backupProviders(backupConfig *model.BackupConfig, monitor *fsmonitor.Monitor) map[string]model.Provider {
+	return provider.InitializeProviders(backupConfig, monitor)
 }
 
 func backupConfigProvider(configManager model.ConfigManager) (*model.BackupConfig, error) {
